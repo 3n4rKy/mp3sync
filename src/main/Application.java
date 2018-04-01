@@ -1,11 +1,12 @@
+package main;
 
-
-import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileReader;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
@@ -29,25 +30,31 @@ public class Application {
 		} else {
 			playlistPath = args[0];
 		}
-		Properties replacements = new Properties();
-		BufferedInputStream stream;
-		try {
-			stream = new BufferedInputStream(new FileInputStream("replacements.properties"));
-			replacements.load(stream);
-			stream.close();
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		}
+		Properties replacements = PropertiesLoader.loadProperties();
 
 		PlayList playList = new PlayList();
-		createPlaylist(playList, playlistPath, replacements);
+		File playListFile = new File(playlistPath);
+		playList.setName(playListFile.getName().replaceAll(".m3u", ""));
+		InputStream is = null;
+
+		try {
+			is = new FileInputStream(playListFile);
+		} catch (FileNotFoundException e) {
+			throw new RuntimeException("could not find playlist file");
+		}
+
+		createPlaylist(playList, is, replacements);
+
 		verifyPlaylist(playList);
+
 		checkFolderOnTarget(playList);
+
 		File localTmpFolder = new File("/tmp/" + playList.getName());
 		String remoteFolder = "/mnt/media_rw/3831-6531/music/";
 		prepareCopyProcess(playList, localTmpFolder);
+
 		copyFiles(localTmpFolder, remoteFolder);
+
 		removeTempFolder(localTmpFolder);
 
 	}
@@ -127,11 +134,9 @@ public class Application {
 		}
 	}
 
-	private static void createPlaylist(PlayList playList, String playlistPath, Properties replacements) {
-		File playListFile = new File(playlistPath);
-		playList.setName(playListFile.getName().replaceAll(".m3u", ""));
+	public static void createPlaylist(PlayList playList, InputStream is, Properties replacements) {
 		List<String> fileNames = new ArrayList<String>();
-		try (BufferedReader br = new BufferedReader(new FileReader(playListFile))) {
+		try (BufferedReader br = new BufferedReader(new InputStreamReader(is, "UTF-8"))) {
 			for (String line; (line = br.readLine()) != null;) {
 				if (!line.startsWith("#")) {
 					for (Entry<Object, Object> replacement : replacements.entrySet()) {
@@ -149,7 +154,7 @@ public class Application {
 
 	}
 
-	private static void verifyPlaylist(PlayList playList) {
+	public static void verifyPlaylist(PlayList playList) {
 		boolean dirty = false;
 		for (String filePath : playList.getFilePaths()) {
 			if (filePath.contains("%")) {
